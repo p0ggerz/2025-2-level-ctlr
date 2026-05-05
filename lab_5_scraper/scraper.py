@@ -310,8 +310,8 @@ class CrawlerRecursive(Crawler):
         Args:
             config (Config): Configuration
         """
-        self.config = config
-        self.urls = []
+        super().__init__(config)
+        self.start_url = self.config.get_seed_urls()[0]
 
     def find_articles(self) -> None:
         """
