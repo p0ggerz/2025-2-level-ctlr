@@ -310,7 +310,8 @@ class CrawlerRecursive(Crawler):
         Args:
             config (Config): Configuration
         """
-        super().__init__(config)
+        self.config = config
+        self.urls = []
 
     def find_articles(self) -> None:
         """
