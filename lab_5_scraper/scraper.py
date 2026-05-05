@@ -56,7 +56,7 @@ class Config:
         self._validate_config_content()
         dto = self._extract_config_content()
         self._seed_urls = dto.seed_urls
-        self._num_articles = dto.total_articles_to_find_and_parse
+        self._num_articles = dto.total_articles
         self._headers = dto.headers
         self._encoding = dto.encoding
         self._timeout = dto.timeout
@@ -89,32 +89,36 @@ class Config:
         dto = self._extract_config_content()
 
         url_pattern = re.compile(r"https?://(www\.)?")
+        if not isinstance(dto.seed_urls, list):
+            raise IncorrectSeedURLError("seed_urls должен быть списком")
         for url in dto.seed_urls:
             if not isinstance(url, str) or not re.match(url_pattern, url):
                 raise IncorrectSeedURLError(f"Некорректный seed URL: {url}")
 
-        if not isinstance(dto.total_articles_to_find_and_parse, int) \
-                or dto.total_articles_to_find_and_parse < 1:
+        if not isinstance(dto.total_articles, int) \
+                or dto.total_articles < 1:
             raise IncorrectNumberOfArticlesError(
                 "Количество статей должно быть положительным целым числом"
             )
-        if dto.total_articles_to_find_and_parse > 150:
+        if dto.total_articles > 150:
             raise NumberOfArticlesOutOfRangeError(
                 "Количество статей не должно превышать 150"
             )
 
         if not isinstance(dto.headers, dict):
-            raise IncorrectHeadersError("Headers должны быть словарём")
+            raise IncorrectHeadersError("Headers должны быть словарем")
 
         if not isinstance(dto.encoding, str):
             raise IncorrectEncodingError("Encoding должен быть строкой")
 
-        if not isinstance(dto.timeout, int) \
-                or dto.timeout <= 0 or dto.timeout > 60:
-            raise IncorrectTimeoutError("Timeout должен быть целым числом от 1 до 60")
+        if not isinstance(dto.timeout, int) or dto.timeout < 0 or dto.timeout > 60:
+            raise IncorrectTimeoutError("Timeout должен быть целым числом от 0 до 60")
 
         if not isinstance(dto.should_verify_certificate, bool):
             raise IncorrectVerifyError("should_verify_certificate должен быть bool")
+        
+        if not isinstance(dto.headless_mode, bool):
+            raise IncorrectVerifyError("headless_mode должен быть bool")
 
     def get_seed_urls(self) -> list[str]:
         """
@@ -414,7 +418,7 @@ def main() -> None:
         article = parser.parse()
         if isinstance(article, Article):
             to_raw(article)
-            print(f"[{i}] Сохранено: {url}")
+            print(f"Статья {i} сохранена: {url}")
 
 
 if __name__ == "__main__":
