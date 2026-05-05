@@ -13,7 +13,7 @@ import requests
 from bs4 import BeautifulSoup, Tag
 
 from core_utils.article.article import Article
-from core_utils.article.io import to_raw
+from core_utils.article.io import to_meta, to_raw
 from core_utils.config_dto import ConfigDTO
 from core_utils.constants import ASSETS_PATH, CRAWLER_CONFIG_PATH
 
@@ -356,6 +356,33 @@ class HTMLParser:
         Args:
             article_soup (bs4.BeautifulSoup): BeautifulSoup instance
         """
+        h1 = article_soup.find("h1")
+        self.article.title = h1.get_text(strip=True) if h1 else ""
+        self.article.author = ["NOT FOUND"]
+        self.article.url = self.full_url
+        date_text = ""
+        if h1:
+            parent = h1.find_parent()
+            if parent:
+                full_text = parent.get_text(separator="\n")
+                for line in full_text.split("\n"):
+                    line = line.strip()
+                    months = ["января","февраля","марта","апреля","мая","июня",
+                            "июля","августа","сентября","октября","ноября","декабря"]
+                    if any(m in line.lower() for m in months) and len(line) < 30:
+                        date_text = line
+                        break
+
+        if date_text:
+            try:
+                self.article.date = self.unify_date_format(date_text)
+            except ValueError:
+                self.article.date = datetime.datetime(1970, 1, 1)
+        else:
+            self.article.date = datetime.datetime(1970, 1, 1)
+            
+            self.article.topics = []
+
 
     def unify_date_format(self, date_str: str) -> datetime.datetime:
         """
@@ -367,7 +394,25 @@ class HTMLParser:
         Returns:
             datetime.datetime: Datetime object
         """
-        return datetime.datetime.strptime(date_str, "%Y-%m-%d")
+        months = {
+            "января": "01", "февраля": "02", "марта": "03",
+            "апреля": "04", "мая": "05", "июня": "06",
+            "июля": "07", "августа": "08", "сентября": "09",
+            "октября": "10", "ноября": "11", "декабря": "12"
+        }
+
+        try:
+            return datetime.datetime.strptime(date_str.strip(), "%Y-%m-%d")
+        except ValueError:
+            pass
+
+        for ru_month, num_month in months.items():
+            if ru_month in date_str.lower():
+                date_str = date_str.lower().replace(ru_month, num_month).strip()
+                date_str = " ".join(date_str.split())
+                return datetime.datetime.strptime(date_str, "%d %m %Y")
+
+        return datetime.datetime(1970, 1, 1)
 
     def parse(self) -> Article | bool:
         """
@@ -418,6 +463,7 @@ def main() -> None:
         article = parser.parse()
         if isinstance(article, Article):
             to_raw(article)
+            to_meta(article)
             print(f"Статья {i} сохранена: {url}")
 
 
