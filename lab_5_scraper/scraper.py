@@ -242,8 +242,7 @@ class Crawler:
         Returns:
             str: Url from HTML
         """
-        href = str(article_bs.get("href", ""))
-        return urljoin("https://mxat.ru", href)
+        return urljoin("https://mxat.ru", article_bs.get("href", ""))
 
     def find_articles(self) -> None:
         """
@@ -252,14 +251,10 @@ class Crawler:
         for seed_url in self.get_search_urls():
             if len(self.urls) >= self.config.get_num_articles():
                 break
-
             try:
                 response = make_request(seed_url, self.config)
                 time.sleep(random.uniform(1, 3))
             except requests.exceptions.RequestException:
-                continue
-
-            if response.status_code != 200:
                 continue
 
             page_soup = BeautifulSoup(response.text, "lxml")
@@ -343,14 +338,19 @@ class HTMLParser:
         """
         h1 = article_soup.find("h1")
         if not h1:
-            self.article.text = ""
             return
 
-        content_block = h1.find_parent()
-        if content_block:
-            self.article.text = content_block.get_text(separator="\n", strip=True)
-        else:
-            self.article.text = ""
+        header_block = h1.find_parent("header")
+        if not header_block:
+            return
+
+        content_block = header_block.find_next_sibling("div")
+        if not content_block:
+            return
+
+        title_text = h1.get_text(separator="\n", strip=True)
+        content_text = content_block.get_text(separator="\n", strip=True)
+        self.article.text = "\n".join(filter(None, [title_text, content_text]))
 
     def _fill_article_with_meta_information(self, article_soup: BeautifulSoup) -> None:
         """
@@ -366,12 +366,7 @@ class HTMLParser:
 
         time_tag = article_soup.find("time")
         if time_tag and time_tag.get("datetime"):
-            try:
-                self.article.date = datetime.datetime.strptime(
-                    time_tag["datetime"], "%Y-%m-%d"
-                )
-            except ValueError:
-                self.article.date = datetime.datetime(1970, 1, 1)
+            self.article.date = self.unify_date_format(time_tag["datetime"])
         else:
             self.article.date = datetime.datetime(1970, 1, 1)
 
@@ -388,26 +383,10 @@ class HTMLParser:
         Returns:
             datetime.datetime: Datetime object
         """
-        months = {
-            "января": "01", "февраля": "02", "марта": "03",
-            "апреля": "04", "мая": "05", "июня": "06",
-            "июля": "07", "августа": "08", "сентября": "09",
-            "октября": "10", "ноября": "11", "декабря": "12"
-        }
-
         try:
             return datetime.datetime.strptime(date_str.strip(), "%Y-%m-%d")
         except ValueError:
-            pass
-
-        date_str_lower = date_str.lower()
-        matched_month = next((ru for ru in months if ru in date_str_lower), None)
-        if matched_month:
-            date_str_lower = date_str_lower.replace(matched_month, months[matched_month]).strip()
-            date_str_lower = " ".join(date_str_lower.split())
-            return datetime.datetime.strptime(date_str_lower, "%d %m %Y")
-
-        return datetime.datetime(1970, 1, 1)
+            return datetime.datetime(1970, 1, 1)
 
     def parse(self) -> Article | bool:
         """
@@ -418,6 +397,7 @@ class HTMLParser:
         """
         try:
             response = make_request(self.full_url, self.config)
+            time.sleep(random.uniform(1, 3))
         except requests.exceptions.RequestException:
             return False
 
@@ -456,7 +436,6 @@ def main() -> None:
     for i, url in enumerate(crawler.urls, start=1):
         parser = HTMLParser(full_url=url, article_id=i, config=configuration)
         article = parser.parse()
-        time.sleep(random.uniform(1, 3))
         if isinstance(article, Article):
             to_raw(article)
             to_meta(article)
