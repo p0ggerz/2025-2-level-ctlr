@@ -242,7 +242,7 @@ class Crawler:
         Returns:
             str: Url from HTML
         """
-        return urljoin("https://mxat.ru", article_bs.get("href", ""))
+        return urljoin("https://mxat.ru", str(article_bs.get("href", "")))
 
     def find_articles(self) -> None:
         """
