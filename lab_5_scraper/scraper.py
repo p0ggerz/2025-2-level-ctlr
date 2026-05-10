@@ -360,7 +360,7 @@ class HTMLParser:
             article_soup (bs4.BeautifulSoup): BeautifulSoup instance
         """
         h1 = article_soup.find("h1")
-        self.article.title = h1.get_text(strip=True) if h1 else ""
+        self.article.title = h1.get_text(strip=True)
         self.article.author = ["NOT FOUND"]
         self.article.url = self.full_url
 
