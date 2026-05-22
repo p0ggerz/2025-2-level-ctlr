@@ -84,19 +84,21 @@ class CorpusManager:
         for article_id in raw_ids_sorted:
             raw_file = path / f"{article_id}_raw.txt"
             if raw_file.stat().st_size == 0:
-                raise EmptyFileError(f"File is empty: {raw_file}")
+                raise InconsistentDatasetError(f"File is empty: {raw_file}")
 
     def _scan_dataset(self) -> None:
         """
         Register each dataset entry.
         """
-        for file in self.path_to_raw_txt_data.iterdir():
-            if file.suffix == ".txt" and file.stem.endswith("_raw"):
-                article_id = file.stem.split("_")[0]
-                if article_id.isdigit():
-                    article = Article(url=None, article_id=int(article_id))
-                    from_raw(file, article)
-                    self._storage[int(article_id)] = article
+        for meta_file in self.path_to_raw_txt_data.glob("*_meta.json"):
+            article_id = int(meta_file.stem.split("_")[0])
+            self._storage[article_id] = Article(url=None, article_id=article_id)
+
+        for raw_file in self.path_to_raw_txt_data.glob("*_raw.txt"):
+            article_id = int(raw_file.stem.split("_")[0])
+            if article_id not in self._storage:
+                self._storage[article_id] = Article(url=None, article_id=article_id)
+            from_raw(raw_file, self._storage[article_id])
 
     def get_articles(self) -> dict:
         """
