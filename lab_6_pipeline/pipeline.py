@@ -49,42 +49,34 @@ class CorpusManager:
         """
         Validate folder with assets.
         """
-        path = self.path_to_raw_txt_data
+        if not self.path_to_raw_txt_data.exists():
+            raise FileNotFoundError("File does not exist")
 
-        if not path.exists():
-            raise FileNotFoundError(f"Path does not exist: {path}")
+        if not self.path_to_raw_txt_data.is_dir():
+            raise NotADirectoryError("Path does not lead to directory")
 
-        if not path.is_dir():
-            raise NotADirectoryError(f"Path is not a directory: {path}")
+        found_files: dict[str, list] = {}
+        for file_path in self.path_to_raw_txt_data.iterdir():
+            file_name = file_path.name
+            if not re.match(r"^\d+_(raw\.txt|meta\.json)$", file_name):
+                continue
+            if not file_path.stat().st_size:
+                raise InconsistentDatasetError(f"File is empty: {file_name}")
+            file_id = file_name.split("_")[0]
+            file_type = "_".join(file_name.split("_")[1:])
+            found_files.setdefault(file_type, []).append(int(file_id))
 
-        all_files = list(path.iterdir())
+        if not found_files:
+            raise EmptyDirectoryError("Directory is empty")
 
-        if not all_files:
-            raise EmptyDirectoryError(f"Directory is empty: {path}")
-
-        raw_ids = []
-
-        for file in all_files:
-            if file.suffix == ".txt" and file.stem.endswith("_raw"):
-                article_id = file.stem.split("_")[0]
-                if article_id.isdigit():
-                    raw_ids.append(int(article_id))
-
+        raw_ids = found_files.get("raw.txt", [])
         if not raw_ids:
-            raise EmptyDirectoryError(f"No raw files found in: {path}")
+            raise EmptyDirectoryError("No raw files found")
 
         raw_ids_sorted = sorted(raw_ids)
         expected_ids = list(range(1, len(raw_ids) + 1))
-
         if raw_ids_sorted != expected_ids:
-            raise InconsistentDatasetError(
-                f"Article IDs are not consecutive: {raw_ids_sorted}"
-            )
-
-        for article_id in raw_ids_sorted:
-            raw_file = path / f"{article_id}_raw.txt"
-            if raw_file.stat().st_size == 0:
-                raise InconsistentDatasetError(f"File is empty: {raw_file}")
+            raise InconsistentDatasetError("Raw file IDs contain slips")
 
     def _scan_dataset(self) -> None:
         """
