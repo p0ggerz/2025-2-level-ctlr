@@ -56,42 +56,54 @@ class CorpusManager:
         if not self.path_to_raw_txt_data.is_dir():
             raise NotADirectoryError("Path does not lead to directory")
 
-        found_files: dict[str, list] = {}
+        raw_ids = []
+        meta_ids = []
+
         for file_path in self.path_to_raw_txt_data.iterdir():
-            file_name = file_path.name
-            if not re.match(r"^\d+_(raw\.txt|meta\.json)$", file_name):
+            if file_path.is_dir():
                 continue
-            if not file_path.stat().st_size:
-                raise InconsistentDatasetError(f"File is empty: {file_name}")
-            file_id = file_name.split("_")[0]
-            file_type = "_".join(file_name.split("_")[1:])
-            found_files.setdefault(file_type, []).append(int(file_id))
 
-        if not found_files:
-            raise EmptyDirectoryError("Directory is empty")
+            name = file_path.stem
+            suffix = file_path.suffix
 
-        raw_ids = found_files.get("raw.txt", [])
+            parts = name.split('_')
+            if len(parts) != 2:
+                continue
+
+            if not parts[0].isdigit():
+                continue
+
+            if parts[1] == 'raw' and suffix == '.txt':
+                file_id = int(parts[0])
+                if not file_path.stat().st_size:
+                    raise InconsistentDatasetError(f"File is empty: {file_path.name}")
+                raw_ids.append(file_id)
+            elif parts[1] == 'meta' and suffix == '.json':
+                file_id = int(parts[0])
+                if not file_path.stat().st_size:
+                    raise InconsistentDatasetError(f"File is empty: {file_path.name}")
+                meta_ids.append(file_id)
+
+        if not raw_ids and not meta_ids:
+            raise EmptyDirectoryError("No valid files found in directory")
+
         if not raw_ids:
             raise EmptyDirectoryError("No raw files found")
 
-        raw_ids_sorted = sorted(raw_ids)
+        if sorted(raw_ids) != sorted(meta_ids):
+            raise InconsistentDatasetError("Mismatch between raw and meta files")
+
         expected_ids = list(range(1, len(raw_ids) + 1))
-        if raw_ids_sorted != expected_ids:
-            raise InconsistentDatasetError("Raw file IDs contain slips")
+        if sorted(raw_ids) != expected_ids:
+            raise InconsistentDatasetError("Raw file IDs contain gaps or are not sequential")
 
     def _scan_dataset(self) -> None:
         """
         Register each dataset entry.
         """
-        for meta_file in self.path_to_raw_txt_data.glob("*_meta.json"):
-            article_id = int(meta_file.stem.split("_")[0])
+        for file_path in self.path_to_raw_txt_data.glob("*_raw.txt"):
+            article_id = int(file_path.stem.split("_")[0])
             self._storage[article_id] = Article(url=None, article_id=article_id)
-
-        for raw_file in self.path_to_raw_txt_data.glob("*_raw.txt"):
-            article_id = int(raw_file.stem.split("_")[0])
-            if article_id not in self._storage:
-                self._storage[article_id] = Article(url=None, article_id=article_id)
-            from_raw(raw_file, self._storage[article_id])
 
     def get_articles(self) -> dict:
         """
