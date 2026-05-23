@@ -51,8 +51,7 @@ class CorpusManager:
         Validate folder with assets.
         """
         if not self.path_to_raw_txt_data.exists():
-            self.path_to_raw_txt_data.mkdir(parents=True, exist_ok=True)
-            return
+            raise FileNotFoundError(f"Path does not exist: {self.path_to_raw_txt_data}")
 
         if not self.path_to_raw_txt_data.is_dir():
             raise NotADirectoryError("Path does not lead to directory")
@@ -86,9 +85,6 @@ class CorpusManager:
 
         if not raw_ids:
             raise EmptyDirectoryError("No raw files found")
-
-        if sorted(raw_ids) != sorted(meta_ids):
-            raise InconsistentDatasetError("Mismatch between raw and meta files")
 
         expected_ids = list(range(1, len(raw_ids) + 1))
         if sorted(raw_ids) != expected_ids:
@@ -136,7 +132,6 @@ class TextProcessingPipeline(PipelineProtocol):
         """
         Perform basic preprocessing and write processed text to files.
         """
-        self._corpus.path_to_raw_txt_data.mkdir(parents=True, exist_ok=True)
         for article in self._corpus.get_articles().values():
             to_cleaned(article)
 
