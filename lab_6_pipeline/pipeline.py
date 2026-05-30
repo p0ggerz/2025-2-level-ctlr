@@ -5,9 +5,10 @@ Pipeline for CONLL-U formatting.
 # pylint: disable=too-few-public-methods, unused-import, undefined-variable, too-many-nested-blocks, duplicate-code
 import pathlib
 import re
+from typing import cast
 
 from core_utils.article.article import Article, ArtifactType
-from core_utils.article.io import from_raw, to_cleaned, to_meta, from_meta
+from core_utils.article.io import from_meta, from_raw, to_cleaned, to_meta
 from core_utils.constants import ASSETS_PATH
 from core_utils.pipeline import LibraryWrapper, PipelineProtocol, TreeNode
 from core_utils.visualizer import visualize
@@ -81,19 +82,19 @@ class CorpusManager:
         for file_path in self.path_to_raw_txt_data.iterdir():
             if file_path.is_dir():
                 continue
-            
+
             name = file_path.stem
             suffix = file_path.suffix
-            
+
             parts = name.split('_')
             if len(parts) != 2 or not parts[0].isdigit():
                 continue
-            
+
             file_id = int(parts[0])
-            
+
             if not file_path.stat().st_size:
                 raise InconsistentDatasetError(f"File is empty: {file_path.name}")
-            
+
             if parts[1] == 'raw' and suffix == '.txt':
                 raw_ids.append(file_id)
             elif parts[1] == 'meta' and suffix == '.json':
@@ -108,6 +109,10 @@ class CorpusManager:
         expected_ids = list(range(1, len(raw_ids) + 1))
         if sorted(raw_ids) != expected_ids:
             raise InconsistentDatasetError("Raw file IDs contain gaps or are not sequential")
+        if sorted(meta_ids) != sorted(raw_ids):
+            raise InconsistentDatasetError(
+                "Number of meta and raw files is not equal or IDs do not match"
+            )
 
     def _scan_dataset(self) -> None:
         """
@@ -195,7 +200,10 @@ class UDPipeAnalyzer(LibraryWrapper):
         nlp = spacy_udpipe.load_from_path("ru", model_path)
 
         if "conll_formatter" not in nlp.pipe_names:
-            nlp.add_pipe("conll_formatter", last=True)
+            nlp.add_pipe("conll_formatter", last=True, config={
+                "conversion_maps": {}, "ext_names": {}, "field_names": {},
+                "include_headers": False, "disable_pandas": True,
+            })
 
         return nlp
 
@@ -240,7 +248,7 @@ class UDPipeAnalyzer(LibraryWrapper):
             raise EmptyFileError(f"CoNLL-U file is empty: {path}")
 
         parser = ConllParser(self._analyzer)
-        doc = parser.parse_conll_file_as_spacy(str(path))
+        doc = cast(Doc, parser.parse_conll_file_as_spacy(str(path)))
         return doc
 
 
