@@ -4,7 +4,6 @@ Pipeline for CONLL-U formatting.
 
 # pylint: disable=too-few-public-methods, unused-import, undefined-variable, too-many-nested-blocks, duplicate-code
 import pathlib
-import re
 from typing import cast
 
 from core_utils.article.article import Article, ArtifactType
@@ -85,19 +84,14 @@ class CorpusManager:
         raw_ids = []
         meta_ids = []
 
-        for file_path in self.path_to_raw_txt_data.glob("*_raw.txt"):
-            if not file_path.stat().st_size:
-                raise InconsistentDatasetError(f"File is empty: {file_path.name}")
-            parts = file_path.stem.split("_")
-            if len(parts) == 2 and parts[0].isdigit():
-                raw_ids.append(int(parts[0]))
-
-        for file_path in self.path_to_raw_txt_data.glob("*_meta.json"):
-            if not file_path.stat().st_size:
-                raise InconsistentDatasetError(f"File is empty: {file_path.name}")
-            parts = file_path.stem.split("_")
-            if len(parts) == 2 and parts[0].isdigit():
-                meta_ids.append(int(parts[0]))
+        patterns = {"*_raw.txt": raw_ids, "*_meta.json": meta_ids}
+        for pattern, id_list in patterns.items():
+            for file_path in self.path_to_raw_txt_data.glob(pattern):
+                if not file_path.stat().st_size:
+                    raise InconsistentDatasetError(f"File is empty: {file_path.name}")
+                parts = file_path.stem.split("_")
+                if len(parts) == 2 and parts[0].isdigit():
+                    id_list.append(int(parts[0]))
 
         if not raw_ids and not meta_ids:
             raise EmptyDirectoryError("No valid files found in directory")
@@ -160,17 +154,17 @@ class TextProcessingPipeline(PipelineProtocol):
         Perform basic preprocessing and write processed text to files.
         """
         for article in self._corpus.get_articles().values():
-            from_meta(article.get_meta_file_path(), article)  # передаём путь и article
-            try:
-                pos_frequencies = self._count_frequencies(article)
-            except EmptyFileError:
-                continue
-            article.set_pos_info(pos_frequencies)
-            to_meta(article)
-            visualize(
-                article=article,
-                path_to_save=ASSETS_PATH / f"{article.article_id}_image.png",
-            )
+            to_cleaned(article)
+
+            if self._analyzer is not None:
+                raw_path = (
+                    self._corpus.path_to_raw_txt_data
+                    / f"{article.article_id}_raw.txt"
+                )
+                from_raw(raw_path, article)
+                conllu_results = self._analyzer.analyze([article.text])
+                article.set_conllu_info(conllu_results[0])
+                self._analyzer.to_conllu(article)
 
 
 class UDPipeAnalyzer(LibraryWrapper):
@@ -293,7 +287,7 @@ class POSFrequencyPipeline:
         Visualize the frequencies of each part of speech.
         """
         for article in self._corpus.get_articles().values():
-            from_meta(article)
+            from_meta(article.get_meta_file_path(), article)
             try:
                 pos_frequencies = self._count_frequencies(article)
             except EmptyFileError:
