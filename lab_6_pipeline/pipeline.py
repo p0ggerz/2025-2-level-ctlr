@@ -38,15 +38,21 @@ except ImportError:
 
 
 class EmptyDirectoryError(Exception):
-    """Raised when the directory is empty."""
+    """
+    Raised when the directory is empty.
+    """
 
 
 class EmptyFileError(Exception):
-    """Raised when a file is empty."""
+    """
+    Raised when a file is empty.
+    """
 
 
 class InconsistentDatasetError(Exception):
-    """Raised when the dataset is inconsistent."""
+    """
+    Raised when the dataset is inconsistent.
+    """
 
 
 class CorpusManager:
@@ -79,26 +85,19 @@ class CorpusManager:
         raw_ids = []
         meta_ids = []
 
-        for file_path in self.path_to_raw_txt_data.iterdir():
-            if file_path.is_dir():
-                continue
-
-            name = file_path.stem
-            suffix = file_path.suffix
-
-            parts = name.split('_')
-            if len(parts) != 2 or not parts[0].isdigit():
-                continue
-
-            file_id = int(parts[0])
-
+        for file_path in self.path_to_raw_txt_data.glob("*_raw.txt"):
             if not file_path.stat().st_size:
                 raise InconsistentDatasetError(f"File is empty: {file_path.name}")
+            parts = file_path.stem.split("_")
+            if len(parts) == 2 and parts[0].isdigit():
+                raw_ids.append(int(parts[0]))
 
-            if parts[1] == 'raw' and suffix == '.txt':
-                raw_ids.append(file_id)
-            elif parts[1] == 'meta' and suffix == '.json':
-                meta_ids.append(file_id)
+        for file_path in self.path_to_raw_txt_data.glob("*_meta.json"):
+            if not file_path.stat().st_size:
+                raise InconsistentDatasetError(f"File is empty: {file_path.name}")
+            parts = file_path.stem.split("_")
+            if len(parts) == 2 and parts[0].isdigit():
+                meta_ids.append(int(parts[0]))
 
         if not raw_ids and not meta_ids:
             raise EmptyDirectoryError("No valid files found in directory")
@@ -109,6 +108,11 @@ class CorpusManager:
         expected_ids = list(range(1, len(raw_ids) + 1))
         if sorted(raw_ids) != expected_ids:
             raise InconsistentDatasetError("Raw file IDs contain gaps or are not sequential")
+
+        expected_meta_ids = list(range(1, len(meta_ids) + 1))
+        if sorted(meta_ids) != expected_meta_ids:
+            raise InconsistentDatasetError("Meta file IDs contain gaps or are not sequential")
+
         if sorted(meta_ids) != sorted(raw_ids):
             raise InconsistentDatasetError(
                 "Number of meta and raw files is not equal or IDs do not match"
@@ -120,8 +124,7 @@ class CorpusManager:
         """
         for file_path in self.path_to_raw_txt_data.glob("*_raw.txt"):
             article_id = int(file_path.stem.split("_")[0])
-            article = Article(url=None, article_id=article_id)
-            from_raw(file_path, article)
+            article = from_raw(file_path)
             self._storage[article_id] = article
 
     def get_articles(self) -> dict:
@@ -157,17 +160,17 @@ class TextProcessingPipeline(PipelineProtocol):
         Perform basic preprocessing and write processed text to files.
         """
         for article in self._corpus.get_articles().values():
-            to_cleaned(article)
-
-            if self._analyzer is not None:
-                raw_path = (
-                    self._corpus.path_to_raw_txt_data
-                    / f"{article.article_id}_raw.txt"
-                )
-                from_raw(raw_path, article)
-                conllu_results = self._analyzer.analyze([article.text])
-                article.set_conllu_info(conllu_results[0])
-                self._analyzer.to_conllu(article)
+            from_meta(article.get_meta_file_path(), article)  # передаём путь и article
+            try:
+                pos_frequencies = self._count_frequencies(article)
+            except EmptyFileError:
+                continue
+            article.set_pos_info(pos_frequencies)
+            to_meta(article)
+            visualize(
+                article=article,
+                path_to_save=ASSETS_PATH / f"{article.article_id}_image.png",
+            )
 
 
 class UDPipeAnalyzer(LibraryWrapper):
