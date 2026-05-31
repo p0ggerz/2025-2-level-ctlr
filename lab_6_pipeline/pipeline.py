@@ -162,8 +162,9 @@ class TextProcessingPipeline(PipelineProtocol):
                 )
                 from_raw(raw_path, article)
                 conllu_results = self._analyzer.analyze([article.text])
-                article.set_conllu_info(conllu_results[0])
-                self._analyzer.to_conllu(article)
+                if conllu_results:
+                    article.set_conllu_info(conllu_results[0])
+                    self._analyzer.to_conllu(article)
 
 
 class UDPipeAnalyzer(LibraryWrapper):
