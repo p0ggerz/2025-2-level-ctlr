@@ -337,6 +337,15 @@ class PatternSearchPipeline(PipelineProtocol):
         Returns:
             list[DiGraph]: Graphs for the sentences in the document
         """
+        graphs = []
+        for sent in doc.sents:
+            graph = DiGraph()
+            for token in sent:
+                graph.add_node(token.i, label=token.pos_)
+                if token.head.i != token.i:
+                    graph.add_edge(token.head.i, token.i, label=token.dep_)
+            graphs.append(graph)
+        return graphs
 
     def _add_children(
         self, graph: DiGraph, subgraph_to_graph: dict, node_id: int, tree_node: TreeNode
@@ -350,6 +359,15 @@ class PatternSearchPipeline(PipelineProtocol):
             node_id (int): ID of root node of the match
             tree_node (TreeNode): Root node of the match
         """
+        for child_id in graph.successors(node_id):
+            if child_id in subgraph_to_graph:
+                child_node = TreeNode(
+                    upos=graph.nodes[child_id]["label"],
+                    text=subgraph_to_graph[child_id],
+                    children=[],
+                )
+                tree_node.children.append(child_node)
+                self._add_children(graph, subgraph_to_graph, child_id, child_node)
 
     def _find_pattern(self, doc_graphs: list) -> dict[int, list[TreeNode]]:
         """
@@ -361,11 +379,61 @@ class PatternSearchPipeline(PipelineProtocol):
         Returns:
             dict[int, list[TreeNode]]: A dictionary with pattern matches
         """
+        pattern_graph = DiGraph()
+        pattern_graph.add_node(0, label=self._pos[0])
+        pattern_graph.add_node(1, label=self._pos[1])
+        pattern_graph.add_node(2, label=self._pos[2])
+        pattern_graph.add_edge(0, 1)
+        pattern_graph.add_edge(1, 2)
+
+        result: dict[int, list[TreeNode]] = {}
+        for sent_id, graph in enumerate(doc_graphs):
+            matcher = DiGraphMatcher(
+                graph,
+                pattern_graph,
+                node_match=lambda n1, n2: n1["label"] == n2["label"],
+            )
+            matches = list(matcher.subgraph_isomorphisms_iter())
+            if not matches:
+                continue
+            nodes = []
+            for match in matches:
+                subgraph_to_graph = {v: graph.nodes[k]["label"] for k, v in match.items()}
+                root_id = [k for k, v in match.items() if v == 0][0]
+                root_node = TreeNode(
+                    upos=graph.nodes[root_id]["label"],
+                    text=subgraph_to_graph[0],
+                    children=[],
+                )
+                self._add_children(graph, subgraph_to_graph, root_id, root_node)
+                nodes.append(root_node)
+            result[sent_id] = nodes
+        return result
+
+
+def run(self) -> None:
+    """
+    Search for a pattern in documents and writes found information to JSON file.
+    """
+    for article in self._corpus.get_articles().values():
+        doc = self._analyzer.from_conllu(article)
+        doc_graphs = self._make_graphs(doc)
+        patterns = self._find_pattern(doc_graphs)
+        article.set_patterns_info(
+            {str(k): [vars(node) for node in v] for k, v in patterns.items()}
+        )
+        to_meta(article)
 
     def run(self) -> None:
         """
         Search for a pattern in documents and writes found information to JSON file.
         """
+        for article in self._corpus.get_articles().values():
+            doc = self._analyzer.from_conllu(article)
+            doc_graphs = self._make_graphs(doc)
+            patterns = self._find_pattern(doc_graphs)
+            article.set_patterns_info(patterns)
+            to_meta(article)
 
 
 def main() -> None:
@@ -381,6 +449,9 @@ def main() -> None:
     corpus_manager = CorpusManager(path_to_raw_txt_data=ASSETS_PATH)
     pos_pipeline = POSFrequencyPipeline(corpus_manager, analyzer)
     pos_pipeline.run()
+
+    pattern_pipeline = PatternSearchPipeline(corpus_manager, analyzer, ("VERB", "NOUN", "ADP"))
+    pattern_pipeline.run()
 
 
 
