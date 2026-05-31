@@ -29,7 +29,7 @@ except ImportError:
 
 try:
     import spacy_udpipe
-    from spacy_conll.parser import ConllParser
+    from spacy_conll import ConllParser  # type: ignore
 except ImportError:
     spacy_udpipe = None  # type: ignore
     ConllParser = None  # type: ignore
@@ -197,13 +197,16 @@ class UDPipeAnalyzer(LibraryWrapper):
         nlp = spacy_udpipe.load_from_path("ru", model_path)
 
         if "conll_formatter" not in nlp.pipe_names:
-            nlp.add_pipe("conll_formatter", last=True, config={
-                "conversion_maps": {},
-                "ext_names": {},
-                "field_names": {},
-                "include_headers": True,
-                "disable_pandas": True,
-            })
+            nlp.add_pipe(
+                "conll_formatter",
+                last=True,
+                config={
+                    "conversion_maps": {"XPOS": {"": "_"}},
+                    "include_headers": True,
+                    "ext_names": {},
+                    "field_names": {},
+                },
+            )
 
         return nlp
 
@@ -220,8 +223,7 @@ class UDPipeAnalyzer(LibraryWrapper):
         results = []
         for doc in self._analyzer.pipe(texts):
             conll = doc._.conll_str
-            if not conll.endswith("\n\n"):
-                conll += "\n"
+            conll = conll.strip() + "\n\n"
             results.append(conll)
         return results
 
@@ -253,7 +255,7 @@ class UDPipeAnalyzer(LibraryWrapper):
         parser = ConllParser(self._analyzer)
         with open(path, encoding="utf-8") as conllu_file:
             content = conllu_file.read()
-        doc: Doc = parser.parse_conll_text_as_spacy(content)
+        doc: Doc = parser.parse_conll_text_as_spacy(content.strip())
         return doc
 
 
