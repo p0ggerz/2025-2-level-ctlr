@@ -298,10 +298,7 @@ class POSFrequencyPipeline:
         """
         for article in self._corpus.get_articles().values():
             from_meta(article.get_meta_file_path(), article)
-            try:
-                pos_frequencies = self._count_frequencies(article)
-            except EmptyFileError:
-                continue
+            pos_frequencies = self._count_frequencies(article)
             article.set_pos_info(pos_frequencies)
             to_meta(article)
             visualize(
