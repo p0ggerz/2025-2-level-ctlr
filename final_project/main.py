@@ -23,7 +23,7 @@ def main(corpus_path: Path, dist_path: Path) -> None:
     if not corpus_path.exists():
         raise FileNotFoundError(f"Corpus folder does not exist: {corpus_path}")
 
-    raw_files = sorted(corpus_path.glob("*.txt"), key=sort_key)
+    raw_files = sorted(corpus_path.glob("*.txt"))
 
     if not raw_files:
         raise ValueError(f"No .txt files found in {corpus_path}")
