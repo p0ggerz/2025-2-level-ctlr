@@ -2,13 +2,21 @@
 Final project implementation.
 """
 
-# pylint: disable=unused-import
+# pylint: disable=wrong-import-position
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lab_6_pipeline.pipeline import UDPipeAnalyzer  # noqa: E402
+from lab_6_pipeline.pipeline import UDPipeAnalyzer
+
+
+def _sort_key(p: Path) -> tuple[int, str]:
+    """Return sort key that handles both 1_raw.txt and mandl-001.txt naming."""
+    try:
+        return (int(p.stem.split("_")[0]), "")
+    except ValueError:
+        return (0, p.name)
 
 
 def main(corpus_path: Path, dist_path: Path) -> None:
@@ -19,13 +27,13 @@ def main(corpus_path: Path, dist_path: Path) -> None:
         corpus_path (Path): Path to folder containing text files.
         dist_path (Path): Path to folder for saving auto_annotated.conllu.
     """
-    raw_files = sorted(
-        corpus_path.glob("*_raw.txt"),
-        key=lambda p: int(p.stem.split("_")[0]),
-    )
+    if not corpus_path.exists():
+        raise FileNotFoundError(f"Corpus folder does not exist: {corpus_path}")
+
+    raw_files = sorted(corpus_path.glob("*.txt"), key=_sort_key)
 
     if not raw_files:
-        raise FileNotFoundError(f"No *_raw.txt files found in {corpus_path}")
+        raise ValueError(f"No .txt files found in {corpus_path}")
 
     dist_path.mkdir(parents=True, exist_ok=True)
 
