@@ -5,6 +5,7 @@ Final project implementation.
 
 # pylint: disable=wrong-import-position
 import sys
+import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -30,7 +31,10 @@ def main(corpus_path: Path, dist_path: Path) -> None:
 
     dist_path.mkdir(parents=True, exist_ok=True)
 
-    texts = [f.read_text(encoding="utf-8").strip() for f in raw_files]
+    texts = [
+        unicodedata.normalize("NFC", f.read_text(encoding="utf-8").strip())
+        for f in raw_files
+    ]
     texts = [t for t in texts if t]
 
     (dist_path / "corpus.txt").write_text("\n\n".join(texts), encoding="utf-8")
